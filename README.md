@@ -4,11 +4,11 @@
 
 Built with **Ollama** (local LLM) · **Detoxify** · **sentence-transformers** · **MLflow** · **GitHub Actions CI/CD**
 
----<img width="1470" height="956" alt="Screenshot 2025-11-21 at 2 02 54 PM" src="https://github.com/user-attachments/assets/a17e283e-50b0-4037-a770-f9cf60dbb37b" />
 
 
 ## 📊 Live Eval Report — Llama 3.2
 
+<img width="1470" height="956" alt="Screenshot 2026-04-29 at 3 24 34 PM" src="https://github.com/user-attachments/assets/fa9421ce-91dd-4c0e-a11a-19e31be5a472" />
 
 
 > *Real output from running the full eval suite on Llama 3.2 across 51 test cases.*
