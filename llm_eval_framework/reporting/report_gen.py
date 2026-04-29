@@ -1,0 +1,170 @@
+"""
+reporting/report_gen.py
+Generates a clean HTML eval report with pass/fail grades per category.
+No external dependencies beyond stdlib.
+"""
+
+import os
+import json
+from datetime import datetime
+
+
+def generate_html_report(results: dict, output_path: str = "reports/eval_report.html"):
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    model = results.get("model", "unknown")
+    suite = results.get("suite", "all")
+    summary = results.get("summary", {})
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LLM Eval Report — {model}</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: #f8f9fa; color: #212529; padding: 2rem; }}
+  h1 {{ font-size: 1.6rem; font-weight: 600; margin-bottom: 0.25rem; }}
+  .meta {{ color: #6c757d; font-size: 0.85rem; margin-bottom: 2rem; }}
+  .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+                   gap: 1rem; margin-bottom: 2rem; }}
+  .metric-card {{ background: white; border-radius: 8px; padding: 1rem;
+                  border: 1px solid #dee2e6; }}
+  .metric-label {{ font-size: 0.72rem; color: #6c757d; text-transform: uppercase;
+                   letter-spacing: 0.05em; margin-bottom: 0.4rem; }}
+  .metric-value {{ font-size: 1.5rem; font-weight: 600; }}
+  .pass {{ color: #198754; }} .warn {{ color: #fd7e14; }} .fail {{ color: #dc3545; }}
+  .section {{ background: white; border-radius: 8px; border: 1px solid #dee2e6;
+              padding: 1.25rem; margin-bottom: 1.5rem; }}
+  .section h2 {{ font-size: 1rem; font-weight: 600; margin-bottom: 1rem;
+                 padding-bottom: 0.5rem; border-bottom: 1px solid #dee2e6; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: 0.8rem; }}
+  th {{ background: #f8f9fa; padding: 0.5rem 0.75rem; text-align: left;
+        font-weight: 600; border-bottom: 2px solid #dee2e6; }}
+  td {{ padding: 0.5rem 0.75rem; border-bottom: 1px solid #f1f3f5;
+        vertical-align: top; max-width: 300px; word-wrap: break-word; }}
+  tr:last-child td {{ border-bottom: none; }}
+  .badge {{ display: inline-block; padding: 2px 8px; border-radius: 12px;
+            font-size: 0.72rem; font-weight: 600; }}
+  .badge-pass {{ background: #d1e7dd; color: #0f5132; }}
+  .badge-fail {{ background: #f8d7da; color: #842029; }}
+  .badge-warn {{ background: #fff3cd; color: #664d03; }}
+  .score-bar {{ height: 6px; border-radius: 3px; background: #e9ecef; margin-top: 4px; }}
+  .score-fill {{ height: 100%; border-radius: 3px; }}
+  .truncate {{ max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+  .footer {{ text-align: center; color: #adb5bd; font-size: 0.78rem; margin-top: 2rem; }}
+</style>
+</head>
+<body>
+<h1>LLM Evaluation Report</h1>
+<p class="meta">Model: <strong>{model}</strong> &nbsp;|&nbsp; Suite: <strong>{suite}</strong>
+   &nbsp;|&nbsp; Generated: {timestamp}</p>
+
+<div class="summary-grid">
+"""
+
+    # Summary cards
+    def score_class(v, threshold=0.7):
+        if v >= threshold:
+            return "pass"
+        elif v >= 0.4:
+            return "warn"
+        return "fail"
+
+    for key, val in summary.items():
+        label = key.replace("_", " ").title()
+        pct = f"{val:.1%}" if val <= 1.0 else str(val)
+        cls = score_class(val)
+        html += f"""  <div class="metric-card">
+    <div class="metric-label">{label}</div>
+    <div class="metric-value {cls}">{pct}</div>
+  </div>
+"""
+
+    html += "</div>\n"
+
+    # Hallucination table
+    if results.get("hallucination"):
+        html += _section_table(
+            "Hallucination Eval",
+            results["hallucination"],
+            cols=["prompt", "response", "faithfulness", "hallucination_risk", "pass"],
+            truncate=["prompt", "response"]
+        )
+
+    # Toxicity table
+    if results.get("toxicity"):
+        html += _section_table(
+            "Toxicity Eval",
+            results["toxicity"],
+            cols=["prompt", "response", "toxicity", "severe_toxicity", "toxicity_pass"],
+            truncate=["prompt", "response"]
+        )
+
+    # Red team table
+    if results.get("redteam"):
+        html += _section_table(
+            "Red-Team Eval (Adversarial + Bias)",
+            results["redteam"],
+            cols=["category", "prompt", "response", "toxicity", "answer_relevancy"],
+            truncate=["prompt", "response"]
+        )
+
+    # RAG table
+    if results.get("rag"):
+        html += _section_table(
+            "RAG Eval (Ragas Metrics)",
+            results["rag"],
+            cols=["question", "answer", "faithfulness", "answer_relevancy", "context_recall", "rag_pass"],
+            truncate=["question", "answer"]
+        )
+
+    html += f"""<div class="footer">Generated by LLM Eval Framework &nbsp;&bull;&nbsp;
+Free stack: Ollama + Detoxify + sentence-transformers + MLflow</div>
+</body></html>"""
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html)
+
+    print(f"Report written: {output_path}")
+    return output_path
+
+
+def _section_table(title: str, rows: list, cols: list, truncate: list = []) -> str:
+    html = f'<div class="section"><h2>{title} ({len(rows)} cases)</h2>\n'
+    html += "<div style='overflow-x:auto'><table>\n<tr>"
+    for col in cols:
+        html += f"<th>{col.replace('_',' ').title()}</th>"
+    html += "</tr>\n"
+
+    for row in rows:
+        html += "<tr>"
+        for col in cols:
+            val = row.get(col, "")
+            if isinstance(val, bool):
+                badge = "badge-pass" if val else "badge-fail"
+                label = "PASS" if val else "FAIL"
+                cell = f'<span class="badge {badge}">{label}</span>'
+            elif isinstance(val, float):
+                pct = f"{val:.1%}"
+                if val >= 0.7:
+                    color = "#198754"
+                elif val >= 0.4:
+                    color = "#fd7e14"
+                else:
+                    color = "#dc3545"
+                fill_pct = int(val * 100)
+                cell = f'{pct}<div class="score-bar"><div class="score-fill" style="width:{fill_pct}%;background:{color}"></div></div>'
+            elif col in truncate:
+                safe = str(val).replace("<", "&lt;").replace(">", "&gt;")[:120]
+                cell = f'<span class="truncate" title="{safe}">{safe}{"..." if len(str(val))>120 else ""}</span>'
+            else:
+                safe = str(val).replace("<", "&lt;").replace(">", "&gt;")
+                cell = safe
+            html += f"<td>{cell}</td>"
+        html += "</tr>\n"
+
+    html += "</table></div></div>\n"
+    return html

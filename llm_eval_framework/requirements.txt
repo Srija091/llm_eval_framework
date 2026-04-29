@@ -1,0 +1,24 @@
+# LLM Eval & Red-Teaming Framework — all free
+# pip install -r requirements.txt
+
+# Local LLM interface (Ollama must be installed separately)
+ollama>=0.1.8
+
+# Free Groq API (optional second backend)
+groq>=0.4.0
+
+# Toxicity scoring — runs fully offline
+detoxify>=0.5.2
+
+# Semantic similarity for hallucination + relevancy scoring
+sentence-transformers>=2.7.0
+
+# RAG evaluation metrics
+ragas>=0.1.9
+datasets>=2.18.0
+
+# Experiment tracking — local, free forever
+mlflow>=2.12.0
+
+# Utilities
+pandas>=2.0.0
